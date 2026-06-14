@@ -16,3 +16,4 @@ data_pipeline/books/processed_books_chunks/*.json
 data_pipeline/books/book_thumbnails/*.png
 node_modules/
 env/
+.env
