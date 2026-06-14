@@ -65,6 +65,7 @@ export STACK_NAME="codex-project-backend"
 export VIDEO_DYNAMO_TABLE="codex_project-content"
 export BOOK_DYNAMO_TABLE="codex_project-books"
 export VIDEO_QDRANT_COLLECTION="codex_project-videos"
+export QUERY_QDRANT_COLLECTION="codex_project-queries"
 export HF_EMBEDDING_MODEL="BAAI/bge-m3"
 ```
 
@@ -90,10 +91,13 @@ Video DynamoDB table: codex_project-content
 Book DynamoDB table:  codex_project-books
 Video Qdrant collection: codex_project-videos
 Book Qdrant collection:  codex_project-books
+Related-query Qdrant collection: codex_project-queries
 ```
 
 This backend reads the same video/book DynamoDB table names. The `/search`
-endpoint searches `codex_project-videos`.
+endpoint searches `codex_project-videos`. Related query pills are read from
+`codex_project-queries` when that collection exists, with fallback suggestions
+from video metadata.
 
 For hybrid BM25 search, copy the Colab-generated BM25 artifact into:
 
@@ -101,7 +105,9 @@ For hybrid BM25 search, copy the Colab-generated BM25 artifact into:
 cloud-backend/lambdas/similarity_search/vocab_idf.json
 ```
 
-If you do not copy it, `/search` still works in dense-only mode.
+If you do not copy it, `/search` still works in dense-only mode. Sparse BM25 is
+only used as a hybrid boost for short keyword-style queries. Conversational
+queries use dense search only.
 
 ## Deploy With Make
 

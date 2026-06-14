@@ -32,6 +32,9 @@ Parameters:
   VideoCollectionName:
     Type: String
     Default: codex_project-videos
+  QueryCollectionName:
+    Type: String
+    Default: codex_project-queries
   HfApiKey:
     Type: String
     Default: ""
@@ -39,6 +42,12 @@ Parameters:
   HfEmbeddingModel:
     Type: String
     Default: BAAI/bge-m3
+  HfVectorDimension:
+    Type: Number
+    Default: 1024
+  HfTimeoutSeconds:
+    Type: Number
+    Default: 25
 
 Conditions:
   ShouldCreateDynamoTables: !Equals [!Ref CreateDynamoTables, "true"]
@@ -168,8 +177,11 @@ Resources:
           QDRANT_URL: !Ref QdrantUrl
           QDRANT_API_KEY: !Ref QdrantApiKey
           COLLECTION_NAME: !Ref VideoCollectionName
+          QUERY_COLLECTION_NAME: !Ref QueryCollectionName
           HF_API_KEY: !Ref HfApiKey
           HF_EMBEDDING_MODEL: !Ref HfEmbeddingModel
+          HF_VECTOR_DIMENSION: !Ref HfVectorDimension
+          HF_TIMEOUT_SECONDS: !Ref HfTimeoutSeconds
       Policies:
         - AWSLambdaBasicExecutionRole
         - Statement:
