@@ -27,8 +27,6 @@ class Experience(BaseModel):
     lesson: str | None = None
     start_time_seconds: int | None = None
     end_time_seconds: int | None = None
-    exact_start_text: str | None = None
-    exact_end_text: str | None = None
     source_title: str | None = None
     topics: list[str] = Field(default_factory=list)
 
@@ -59,8 +57,6 @@ def _flatten_experience(video: dict[str, Any], experience: dict[str, Any], index
         lesson=experience.get("lesson"),
         start_time_seconds=_seconds(experience.get("start_time_seconds", experience.get("start_time"))),
         end_time_seconds=_seconds(experience.get("end_time_seconds", experience.get("end_time"))),
-        exact_start_text=experience.get("exact_start_text"),
-        exact_end_text=experience.get("exact_end_text"),
         source_title=_video_title(video),
         topics=list(video.get("topics") or []),
     )
@@ -86,4 +82,3 @@ def lambda_handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
     except Exception as exc:
         logger.exception("Failed to fetch experiences")
         return error_response(str(exc))
-

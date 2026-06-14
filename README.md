@@ -154,6 +154,25 @@ Deployment guide:
 cloud-backend/PUBLISH.md
 ```
 
+The React motivation search UI lives in `frontend/`. For local development:
+
+```bash
+cd frontend
+npm install
+VITE_API_URL="https://your-api-id.execute-api.us-east-1.amazonaws.com/prod" npm run dev
+```
+
+After the backend stack is deployed, publish both backend and UI with:
+
+```bash
+cd cloud-backend
+make release
+```
+
+`make release` builds the SAM backend, builds `frontend/`, uploads the generated
+UI to the stack S3 bucket, writes `config.json` with the deployed API URL, and
+invalidates CloudFront.
+
 ## Idempotency
 
 Every file-producing phase checks whether its output already exists and skips it.
@@ -162,5 +181,5 @@ This prevents duplicate LLM calls and makes reruns safe.
 ## Notes
 
 - Video timestamp mapping is character-offset based and uses interpolation inside
-  transcript fragments for zero-drift chunk, experience, advice, and solved-query timestamps.
+  transcript fragments for zero-drift chunks, experiences, and fitness-advice timestamps.
 - Book chunking maps character offsets back to source page numbers.

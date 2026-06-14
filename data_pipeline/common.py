@@ -71,6 +71,12 @@ def sanitize_stem(value: str) -> str:
     return cleaned or "untitled"
 
 
+def normalize_whitespace(value: str) -> str:
+    """Collapse newlines, tabs, and repeated spaces into single spaces."""
+
+    return " ".join(str(value or "").split())
+
+
 def iter_json_files(directory: str | Path) -> Iterable[Path]:
     yield from sorted(Path(directory).glob("*.json"))
 
@@ -175,4 +181,3 @@ def call_with_backoff(
                 exc,
             )
             time.sleep(sleep_for)
-

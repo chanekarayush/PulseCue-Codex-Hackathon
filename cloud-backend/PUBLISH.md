@@ -19,6 +19,7 @@ the Colab pipeline.
   - `codex-project-ui-<account-id>-<region>`
 - CloudFront distribution for HTTPS UI hosting
 - A CloudFormation custom resource that writes `config.json` into the UI bucket
+- React motivation search UI from `../frontend`
 
 ## Prerequisites
 
@@ -140,9 +141,26 @@ To upload only the frontend/static UI:
 make upload_ui
 ```
 
-If `../frontend/package.json` exists, the Makefile runs `npm install` and
-`npm run build`, then uploads `../frontend/dist`. If no frontend exists, it
-uploads the placeholder UI in `cloud-backend/ui/`.
+If `../frontend/package.json` exists, the Makefile runs `npm ci` when a lockfile
+exists, otherwise `npm install`, then `npm run build`, and uploads
+`../frontend/dist`. If no frontend exists, it uploads the fallback UI in
+`cloud-backend/ui/`.
+
+`upload_ui` also writes a fresh `config.json` into the UI bucket:
+
+```json
+{
+  "projectName": "codex_project",
+  "apiUrl": "https://your-api-id.execute-api.region.amazonaws.com/prod"
+}
+```
+
+The React UI reads this file at runtime. For local frontend development, set:
+
+```bash
+cd ../frontend
+VITE_API_URL="https://your-api-id.execute-api.us-east-1.amazonaws.com/prod" npm run dev
+```
 
 To print stack outputs:
 

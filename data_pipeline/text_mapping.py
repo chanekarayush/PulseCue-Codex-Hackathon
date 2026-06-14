@@ -8,6 +8,8 @@ import string
 from dataclasses import dataclass
 from typing import Any, Sequence
 
+from data_pipeline.common import normalize_whitespace
+
 
 EXTRA_PUNCTUATION = "।॥“”‘’…–—"
 PUNCTUATION = string.punctuation + EXTRA_PUNCTUATION
@@ -49,7 +51,7 @@ def build_video_text_and_time_map(
     current_char = 0
 
     for fragment in fragments:
-        text = str(fragment.get("text") or "").strip()
+        text = normalize_whitespace(str(fragment.get("text") or ""))
         if not text:
             continue
 
@@ -86,7 +88,7 @@ def build_book_text_and_page_map(
     current_char = 0
 
     for page_obj in pages:
-        text = str(page_obj.get("text") or "").strip()
+        text = normalize_whitespace(str(page_obj.get("text") or ""))
         if not text:
             continue
 
@@ -245,4 +247,3 @@ def resolve_segment_timestamps(
         }
     )
     return enriched
-

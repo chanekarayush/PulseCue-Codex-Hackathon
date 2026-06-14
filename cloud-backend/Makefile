@@ -11,6 +11,8 @@ TEMPLATE_FILE ?= template.yaml
 STACK_NAME    ?= codex-project-backend
 AWS_REGION    ?= $(shell aws configure get region 2>/dev/null)
 AWS_REGION    := $(if $(strip $(AWS_REGION)),$(strip $(AWS_REGION)),us-east-1)
+PROJECT_NAME  ?= codex_project
+STAGE_NAME    ?= prod
 
 VIDEO_DYNAMO_TABLE       := $(or $(strip $(VIDEO_DYNAMO_TABLE)),$(strip $(DITTO_VIDEOS_TABLE)),codex_project-content)
 BOOK_DYNAMO_TABLE        := $(or $(strip $(BOOK_DYNAMO_TABLE)),$(strip $(DITTO_BOOKS_TABLE)),codex_project-books)
@@ -22,6 +24,8 @@ FRONTEND_DIR ?= ../frontend
 UI_FALLBACK_DIR ?= ui
 
 PARAMETER_OVERRIDES = \
+	ProjectName=$(PROJECT_NAME) \
+	StageName=$(STAGE_NAME) \
 	CreateDynamoTables=$(CREATE_DYNAMO_TABLES) \
 	VideoMetadataTableName=$(VIDEO_DYNAMO_TABLE) \
 	BooksMetadataTableName=$(BOOK_DYNAMO_TABLE) \
@@ -96,13 +100,28 @@ upload_ui:
 	fi; \
 	if [ -f "$(FRONTEND_DIR)/package.json" ]; then \
 		echo "Building frontend from $(FRONTEND_DIR)..."; \
-		cd $(FRONTEND_DIR) && npm install && npm run build; \
+		cd $(FRONTEND_DIR) && if [ -f package-lock.json ]; then npm ci; else npm install; fi && npm run build; \
 		SOURCE_DIR="$(FRONTEND_DIR)/dist"; \
 	else \
 		echo "No frontend package found. Uploading placeholder UI from $(UI_FALLBACK_DIR)."; \
 		SOURCE_DIR="$(UI_FALLBACK_DIR)"; \
 	fi; \
-	aws s3 sync "$$SOURCE_DIR" "s3://$$UI_BUCKET" --delete --region $(AWS_REGION); \
+	aws s3 sync "$$SOURCE_DIR" "s3://$$UI_BUCKET" --delete --exclude "config.json" --region $(AWS_REGION); \
+	API_URL=$$(aws cloudformation describe-stacks \
+		--stack-name $(STACK_NAME) \
+		--region $(AWS_REGION) \
+		--query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" \
+		--output text 2>/dev/null || echo "") ; \
+	if [ -n "$$API_URL" ] && [ "$$API_URL" != "None" ]; then \
+		TMP_CONFIG=$$(mktemp); \
+		printf '{\n  "projectName": "%s",\n  "apiUrl": "%s"\n}\n' "$(PROJECT_NAME)" "$$API_URL" > "$$TMP_CONFIG"; \
+		aws s3 cp "$$TMP_CONFIG" "s3://$$UI_BUCKET/config.json" \
+			--content-type "application/json" \
+			--cache-control "no-store" \
+			--region $(AWS_REGION) >/dev/null; \
+		rm -f "$$TMP_CONFIG"; \
+		echo "Uploaded runtime config.json for $$API_URL"; \
+	fi; \
 	CF_DIST_ID=$$(aws cloudformation describe-stacks \
 		--stack-name $(STACK_NAME) \
 		--region $(AWS_REGION) \

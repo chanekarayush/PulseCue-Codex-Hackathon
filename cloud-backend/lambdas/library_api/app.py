@@ -31,9 +31,12 @@ def _video_id(event: dict[str, Any]) -> str | None:
 def _video_summary(item: dict[str, Any]) -> dict[str, Any]:
     return {
         "video_id": item.get("video_id"),
-        "title": item.get("title") or item.get("title_suggestion"),
+        "title": item.get("title"),
         "summary": item.get("summary"),
         "topics": item.get("topics") or [],
+        "target_audience": item.get("target_audience") or [],
+        "difficulty_level": item.get("difficulty_level") or "unknown",
+        "queries": item.get("queries") or [],
         "type": item.get("type") or item.get("source_type") or "youtube_video",
     }
 
@@ -59,7 +62,7 @@ def lambda_handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
         if route == "/videos":
             videos = scan_all(
                 video_table,
-                ProjectionExpression="video_id, title, title_suggestion, summary, topics, #type, source_type",
+                ProjectionExpression="video_id, title, summary, topics, target_audience, difficulty_level, queries, #type, source_type",
                 ExpressionAttributeNames={"#type": "type"},
             )
             return response(200, {"count": len(videos), "videos": [_video_summary(item) for item in videos]})

@@ -14,6 +14,7 @@ from data_pipeline.common import (
     get_logger,
     iter_json_files,
     load_json,
+    normalize_whitespace,
     save_json_atomic,
     skip_if_exists,
 )
@@ -66,7 +67,7 @@ def process_transcript_file(
                 "chunk_id": f"{video_id}_{index:04d}",
                 "video_id": video_id,
                 "source_type": "youtube_video",
-                "text": chunk.text,
+                "text": normalize_whitespace(chunk.text),
                 "start_index": chunk.start_index,
                 "end_index": chunk.end_index,
                 "start_time": start_time,

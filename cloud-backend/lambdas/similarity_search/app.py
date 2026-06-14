@@ -13,9 +13,10 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+import boto3
 from qdrant_client import QdrantClient, models
 
-from common import error_response, options_response, response
+from common import decimal_to_native, error_response, options_response, response
 
 
 logger = logging.getLogger()
@@ -151,6 +152,92 @@ def _point_to_hit(point: Any) -> dict[str, Any]:
     }
 
 
+def _video_ids_from_hits(hits: list[dict[str, Any]]) -> list[str]:
+    video_ids: list[str] = []
+    for hit in hits:
+        payload = hit.get("payload") or {}
+        video_id = payload.get("video_id")
+        if video_id and video_id not in video_ids:
+            video_ids.append(str(video_id))
+    return video_ids
+
+
+def _load_video_metadata(video_ids: list[str]) -> dict[str, dict[str, Any]]:
+    table_name = os.environ.get("DYNAMODB_TABLE")
+    if not table_name or not video_ids:
+        return {}
+
+    table = boto3.resource("dynamodb").Table(table_name)
+    lookup: dict[str, dict[str, Any]] = {}
+    for video_id in video_ids[:25]:
+        try:
+            item = table.get_item(Key={"video_id": video_id}).get("Item")
+        except Exception:
+            logger.exception("Failed to load metadata for video_id=%s", video_id)
+            continue
+        if item:
+            lookup[video_id] = decimal_to_native(item)
+    return lookup
+
+
+def _enrich_hits(hits: list[dict[str, Any]], metadata_lookup: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    enriched: list[dict[str, Any]] = []
+    for hit in hits:
+        payload = dict(hit.get("payload") or {})
+        video_id = str(payload.get("video_id") or "")
+        metadata = metadata_lookup.get(video_id) or {}
+        for key in ("title", "summary", "topics", "target_audience", "difficulty_level", "queries"):
+            if metadata.get(key) is not None and payload.get(key) in (None, "", []):
+                payload[key] = metadata[key]
+        enriched.append({**hit, "payload": payload})
+    return enriched
+
+
+def _fallback_related_queries(raw_query: str) -> list[str]:
+    tokens = _tokenize(raw_query)
+    if "discipline" in tokens or "consistent" in tokens:
+        return [
+            "How do I stay consistent with workouts?",
+            "How can I build discipline when motivation drops?",
+            "What routine helps beginners keep training?",
+        ]
+    if "fat" in tokens or "weight" in tokens:
+        return [
+            "What helps beginners lose fat safely?",
+            "How should I combine diet and training?",
+            "How do I avoid quitting during fat loss?",
+        ]
+    return [
+        "How can I build mental toughness?",
+        "How do I stop quitting when training gets hard?",
+        "How should I recover after a bad week?",
+    ]
+
+
+def _related_queries(raw_query: str, metadata_lookup: dict[str, dict[str, Any]]) -> list[str]:
+    raw_normalized = raw_query.strip().lower()
+    query_tokens = set(_tokenize(raw_query))
+    suggestions: list[str] = []
+
+    for metadata in metadata_lookup.values():
+        for query in metadata.get("queries") or []:
+            query_text = str(query or "").strip()
+            if not query_text or query_text.lower() == raw_normalized or query_text in suggestions:
+                continue
+            suggestion_tokens = set(_tokenize(query_text))
+            if not query_tokens or query_tokens.intersection(suggestion_tokens):
+                suggestions.append(query_text)
+            if len(suggestions) >= 6:
+                return suggestions
+
+    for query in _fallback_related_queries(raw_query):
+        if query.lower() != raw_normalized and query not in suggestions:
+            suggestions.append(query)
+        if len(suggestions) >= 6:
+            break
+    return suggestions
+
+
 def lambda_handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
     if event.get("httpMethod") == "OPTIONS":
         return options_response()
@@ -195,6 +282,8 @@ def lambda_handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
 
         hits = [_point_to_hit(point) for point in result.points]
         hits = [hit for hit in hits if hit["score"] >= threshold]
+        metadata_lookup = _load_video_metadata(_video_ids_from_hits(hits))
+        hits = _enrich_hits(hits, metadata_lookup)
         return response(
             200,
             {
@@ -203,6 +292,7 @@ def lambda_handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
                 "threshold": threshold,
                 "count": len(hits),
                 "results": hits,
+                "related_queries": _related_queries(query, metadata_lookup),
             },
         )
     except Exception as exc:

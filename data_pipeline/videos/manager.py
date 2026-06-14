@@ -7,7 +7,13 @@ from pathlib import Path
 from typing import Any, Iterable
 from urllib.parse import parse_qs, urlparse
 
-from data_pipeline.common import call_with_backoff, get_logger, save_json_atomic, skip_if_exists
+from data_pipeline.common import (
+    call_with_backoff,
+    get_logger,
+    normalize_whitespace,
+    save_json_atomic,
+    skip_if_exists,
+)
 
 
 LOGGER = get_logger(__name__)
@@ -110,7 +116,7 @@ class TranscriptManager:
                 start = getattr(item, "start", getattr(item, "start_time", 0.0))
                 duration = getattr(item, "duration", 0.0)
 
-            cleaned_text = str(text or "").strip()
+            cleaned_text = normalize_whitespace(str(text or ""))
             if not cleaned_text:
                 continue
 

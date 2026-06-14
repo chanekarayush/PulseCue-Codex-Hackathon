@@ -46,13 +46,8 @@ JSON schema:
   "target_audience": ["string"],
   "difficulty_level": "beginner|intermediate|advanced|mixed|unknown",
   "topics": ["string"],
-  "queries_solved": [
-    {
-      "query": "A search-style question solved in the video",
-      "answer": "Concise answer from the transcript",
-      "exact_start_text": "The first 7-10 words of the answered segment copied verbatim",
-      "exact_end_text": "The last 7-10 words of the answered segment copied verbatim"
-    }
+  "queries": [
+    "Search-style question the video answers, e.g. How do I build discipline for fitness?"
   ],
   "experiences": [
     {
@@ -67,6 +62,7 @@ JSON schema:
   "fitness_advice": [
     {
       "advice": "string",
+      "for_whom": ["beginner|intermediate|advanced|overweight|athlete|busy_professional|general"],
       "category": "training|nutrition|recovery|mobility|fat_loss|muscle_gain|habit|mindset|safety|other",
       "why_it_matters": "string",
       "how_to_apply": "string",
@@ -81,11 +77,14 @@ JSON schema:
 
 Critical rules:
 1. exact_start_text and exact_end_text must be copied verbatim from the transcript.
-2. Do not invent timestamps; the pipeline resolves timestamps from exact text anchors.
-3. Ignore audio-only, performance-only, or unrelated legacy metadata.
-4. Prefer practical fitness/motivation search intent over generic summaries.
-5. Use empty arrays when the transcript does not support a field.
-6. Keep JSON keys exactly as specified.
+2. exact_start_text/exact_end_text are required only for experiences and fitness_advice.
+3. queries must be a simple array of user search questions only. Do not include answers, timestamps,
+   exact_start_text, exact_end_text, or objects in queries.
+4. Do not invent timestamps; the pipeline resolves timestamps from exact text anchors.
+5. Ignore audio-only, performance-only, or unrelated legacy metadata.
+6. Prefer practical fitness/motivation search intent over generic summaries.
+7. Use empty arrays when the transcript does not support a field.
+8. Keep JSON keys exactly as specified.
 """.strip()
 
 
@@ -97,7 +96,7 @@ def _resolve_timestamps(
     """Resolve anchored fitness/motivation metadata to interpolated transcript times."""
 
     resolved = dict(metadata)
-    for key in ("experiences", "fitness_advice", "queries_solved"):
+    for key in ("experiences", "fitness_advice"):
         value = resolved.get(key)
         if isinstance(value, list):
             resolved[key] = [
