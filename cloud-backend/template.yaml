@@ -1,0 +1,330 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: codex_project serverless backend for English motivation and fitness search.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: codex_project
+  StageName:
+    Type: String
+    Default: prod
+  CreateDynamoTables:
+    Type: String
+    Default: "true"
+    AllowedValues:
+      - "true"
+      - "false"
+    Description: Set false if codex_project-content and codex_project-books already exist outside this stack.
+  VideoMetadataTableName:
+    Type: String
+    Default: codex_project-content
+  BooksMetadataTableName:
+    Type: String
+    Default: codex_project-books
+  QdrantUrl:
+    Type: String
+    Default: ""
+  QdrantApiKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+  VideoCollectionName:
+    Type: String
+    Default: codex_project-videos
+  HfApiKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+  HfEmbeddingModel:
+    Type: String
+    Default: BAAI/bge-m3
+
+Conditions:
+  ShouldCreateDynamoTables: !Equals [!Ref CreateDynamoTables, "true"]
+
+Globals:
+  Function:
+    Runtime: python3.12
+    MemorySize: 256
+    Timeout: 30
+    CodeUri: lambdas/
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        PROJECT_NAME: !Ref ProjectName
+    LoggingConfig:
+      LogFormat: JSON
+
+Resources:
+  VideoMetadataTable:
+    Type: AWS::DynamoDB::Table
+    Condition: ShouldCreateDynamoTables
+    Properties:
+      TableName: !Ref VideoMetadataTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: video_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: video_id
+          KeyType: HASH
+
+  BooksMetadataTable:
+    Type: AWS::DynamoDB::Table
+    Condition: ShouldCreateDynamoTables
+    Properties:
+      TableName: !Ref BooksMetadataTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: book_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: book_id
+          KeyType: HASH
+
+  CodexProjectApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: codex_project-api
+      StageName: !Ref StageName
+      Cors:
+        AllowMethods: "'GET,PUT,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'*'"
+
+  UiBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "codex-project-ui-${AWS::AccountId}-${AWS::Region}"
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerPreferred
+
+  UiBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref UiBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: PublicReadForStaticWebsite
+            Effect: Allow
+            Principal: "*"
+            Action: s3:GetObject
+            Resource: !Sub "${UiBucket.Arn}/*"
+
+  UiDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        HttpVersion: http2
+        DefaultRootObject: index.html
+        Origins:
+          - Id: UiWebsiteOrigin
+            DomainName: !Sub "${UiBucket}.s3-website-${AWS::Region}.amazonaws.com"
+            CustomOriginConfig:
+              OriginProtocolPolicy: http-only
+        DefaultCacheBehavior:
+          TargetOriginId: UiWebsiteOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachedMethods:
+            - GET
+            - HEAD
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+
+  SimilaritySearchFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: codex_project-similarity-search
+      Handler: similarity_search.app.lambda_handler
+      Environment:
+        Variables:
+          DYNAMODB_TABLE: !Ref VideoMetadataTableName
+          QDRANT_URL: !Ref QdrantUrl
+          QDRANT_API_KEY: !Ref QdrantApiKey
+          COLLECTION_NAME: !Ref VideoCollectionName
+          HF_API_KEY: !Ref HfApiKey
+          HF_EMBEDDING_MODEL: !Ref HfEmbeddingModel
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Scan
+              Resource: !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${VideoMetadataTableName}"
+      Events:
+        Search:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CodexProjectApi
+            Path: /search
+            Method: GET
+
+  GetExperiencesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: codex_project-get-experiences
+      Handler: get_experiences.app.lambda_handler
+      Environment:
+        Variables:
+          DYNAMODB_TABLE: !Ref VideoMetadataTableName
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Scan
+              Resource: !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${VideoMetadataTableName}"
+      Events:
+        Experiences:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CodexProjectApi
+            Path: /experiences
+            Method: GET
+
+  LibraryApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: codex_project-library-api
+      Handler: library_api.app.lambda_handler
+      Environment:
+        Variables:
+          DYNAMODB_TABLE: !Ref VideoMetadataTableName
+          BOOKS_TABLE: !Ref BooksMetadataTableName
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Scan
+              Resource:
+                - !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${VideoMetadataTableName}"
+                - !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${BooksMetadataTableName}"
+      Events:
+        Videos:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CodexProjectApi
+            Path: /videos
+            Method: GET
+        VideoById:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CodexProjectApi
+            Path: /videos/{videoId}
+            Method: GET
+        Books:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CodexProjectApi
+            Path: /books
+            Method: GET
+
+  AdminApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: codex_project-admin-api
+      Handler: admin_api.app.lambda_handler
+      Environment:
+        Variables:
+          DYNAMODB_TABLE: !Ref VideoMetadataTableName
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Scan
+                - dynamodb:UpdateItem
+              Resource: !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${VideoMetadataTableName}"
+      Events:
+        AdminVideos:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CodexProjectApi
+            Path: /admin/videos
+            Method: GET
+        AdminVideoById:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CodexProjectApi
+            Path: /admin/videos/{videoId}
+            Method: GET
+        AdminUpdateVideo:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CodexProjectApi
+            Path: /admin/videos/{videoId}
+            Method: PUT
+
+  DashboardInitiatorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: codex_project-dashboard-initiator
+      Handler: dashboard_initiator.app.lambda_handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+              Resource: !Sub "${UiBucket.Arn}/*"
+
+  DashboardConfig:
+    Type: Custom::ConfigWriter
+    Properties:
+      ServiceToken: !GetAtt DashboardInitiatorFunction.Arn
+      BucketName: !Ref UiBucket
+      ProjectName: !Ref ProjectName
+      ApiUrl: !Sub "https://${CodexProjectApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}"
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway base URL.
+    Value: !Sub "https://${CodexProjectApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}"
+  UiBucketName:
+    Description: Static UI S3 bucket name.
+    Value: !Ref UiBucket
+  UiWebsiteUrl:
+    Description: S3 website URL.
+    Value: !Sub "http://${UiBucket}.s3-website-${AWS::Region}.amazonaws.com"
+  CloudFrontURL:
+    Description: CloudFront HTTPS URL.
+    Value: !Sub "https://${UiDistribution.DomainName}"
+  CloudFrontDistributionId:
+    Description: CloudFront distribution id for cache invalidation.
+    Value: !Ref UiDistribution
+  VideoMetadataTable:
+    Description: Video metadata DynamoDB table used by the Colab pipeline.
+    Value: !Ref VideoMetadataTableName
+  BooksMetadataTable:
+    Description: Book metadata DynamoDB table used by the Colab pipeline.
+    Value: !Ref BooksMetadataTableName
