@@ -155,7 +155,13 @@ async function request(path, params = {}) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload.error || `Request failed with ${response.status}`);
+    const parts = [
+      payload.error || `Request failed with ${response.status}`,
+      payload.code ? `Code: ${payload.code}` : "",
+      payload.hint || "",
+      payload.detail ? `Detail: ${payload.detail}` : "",
+    ].filter(Boolean);
+    throw new Error(parts.join(" "));
   }
   return payload;
 }
@@ -163,6 +169,7 @@ async function request(path, params = {}) {
 export async function search(query, options = {}) {
   const data = await request("/search", {
     q: query,
+    type: options.type || "combined",
     limit: options.limit || 10,
   });
   const rawResults = data.results || data.hits || [];

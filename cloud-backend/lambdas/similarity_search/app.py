@@ -6,15 +6,14 @@ import json
 import logging
 import math
 import os
+import random
 import re
-import time
-import urllib.error
-import urllib.request
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
 import boto3
+from huggingface_hub import InferenceClient
 from qdrant_client import QdrantClient, models
 
 from common import decimal_to_native, error_response, options_response, response
@@ -52,10 +51,10 @@ def _tokenize(text: str, *, remove_stopwords: bool = True) -> list[str]:
 
 
 def _should_skip_sparse(raw_query: str) -> bool:
-    content_words = _tokenize(raw_query, remove_stopwords=True)
-    if not content_words:
+    raw_words = _tokenize(raw_query, remove_stopwords=False)
+    if not raw_words:
         return True
-    return len(content_words) > 12
+    return len(raw_words) > 3
 
 
 def _build_sparse_query(query: str) -> models.SparseVector | None:
@@ -88,63 +87,47 @@ def _build_sparse_query(query: str) -> models.SparseVector | None:
     return models.SparseVector(indices=indices, values=values)
 
 
-def _extract_embedding(payload: Any) -> list[float]:
-    if isinstance(payload, dict):
-        if "embedding" in payload:
-            return _extract_embedding(payload["embedding"])
-        if "error" in payload:
-            raise RuntimeError(f"Hugging Face embedding error: {payload['error']}")
-
-    if not isinstance(payload, list) or not payload:
-        raise RuntimeError("Unexpected embedding response from Hugging Face.")
-
-    if all(isinstance(value, (int, float)) for value in payload):
-        return [float(value) for value in payload]
-
-    if len(payload) == 1 and isinstance(payload[0], list):
-        return _extract_embedding(payload[0])
-
-    if all(isinstance(row, list) for row in payload):
-        rows = [[float(value) for value in row] for row in payload if row]
-        if not rows:
-            raise RuntimeError("Embedding response had no numeric rows.")
-        dimensions = len(rows[0])
-        return [sum(row[index] for row in rows) / len(rows) for index in range(dimensions)]
-
-    raise RuntimeError("Unexpected embedding response shape from Hugging Face.")
-
-
-def _hf_max_attempts() -> int:
-    try:
-        return max(1, min(int(os.environ.get("HF_MAX_ATTEMPTS", "2")), 4))
-    except ValueError:
-        return 2
-
-
 def _hf_timeout_seconds() -> float:
     try:
-        return max(3.0, min(float(os.environ.get("HF_TIMEOUT_SECONDS", "8")), 20.0))
+        return max(3.0, min(float(os.environ.get("HF_TIMEOUT_SECONDS", "25")), 30.0))
     except ValueError:
-        return 8.0
+        return 25.0
 
 
-def _hf_backoff(attempt: int) -> float:
-    return min(0.75 * (2**attempt), 6.0)
+def _hf_vector_dimension() -> int:
+    try:
+        return int(os.environ.get("HF_VECTOR_DIMENSION", "1024"))
+    except ValueError:
+        return 1024
 
 
-def _read_hf_embedding_payload(query: str, model_name: str, hf_api_key: str) -> Any:
-    url = f"https://api-inference.huggingface.co/pipeline/feature-extraction/{model_name}"
-    request = urllib.request.Request(
-        url,
-        data=json.dumps({"inputs": query, "options": {"wait_for_model": True}}).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {hf_api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    with urllib.request.urlopen(request, timeout=_hf_timeout_seconds()) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+class HuggingFaceEmbedder:
+    """Generate dense embeddings through the official Hugging Face InferenceClient."""
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        model_id: str = "BAAI/bge-m3",
+        vector_dimension: int = 1024,
+        timeout_seconds: float = 25.0,
+    ) -> None:
+        self.client = InferenceClient(token=api_key, timeout=timeout_seconds)
+        self.model_id = model_id
+        self.vector_dimension = vector_dimension
+
+    def generate_embedding(self, text: str) -> list[float]:
+        embedding = self.client.feature_extraction(
+            text=text,
+            model=self.model_id,
+        )
+        result = embedding.tolist() if hasattr(embedding, "tolist") else list(embedding)
+        if isinstance(result, list) and result and isinstance(result[0], list):
+            result = result[0]
+        vector = [float(value) for value in result]
+        if len(vector) != self.vector_dimension:
+            raise ValueError(f"Expected {self.vector_dimension}-d vector, got {len(vector)}-d")
+        return vector
 
 
 def _dense_embedding(query: str) -> list[float]:
@@ -153,37 +136,44 @@ def _dense_embedding(query: str) -> list[float]:
         raise RuntimeError("HF_API_KEY is required for dense query embeddings.")
 
     model_name = os.environ.get("HF_EMBEDDING_MODEL", "BAAI/bge-m3")
-    payload: Any = None
-    last_error: Exception | None = None
-    retryable_http_statuses = {408, 409, 425, 429, 500, 502, 503, 504}
-
-    for attempt in range(_hf_max_attempts()):
-        try:
-            payload = _read_hf_embedding_payload(query, model_name, hf_api_key)
-            last_error = None
-            break
-        except urllib.error.HTTPError as exc:
-            details = exc.read().decode("utf-8", errors="ignore")
-            last_error = RuntimeError(f"Hugging Face embedding request failed: {exc.code} {details}")
-            if exc.code not in retryable_http_statuses or attempt >= _hf_max_attempts() - 1:
-                raise last_error from exc
-        except (TimeoutError, urllib.error.URLError, OSError) as exc:
-            last_error = RuntimeError(f"Hugging Face embedding request failed: {exc}")
-            if attempt >= _hf_max_attempts() - 1:
-                raise last_error from exc
-
-        time.sleep(_hf_backoff(attempt))
-
-    if last_error:
-        raise last_error
-    if payload is None:
-        raise RuntimeError("Hugging Face embedding request returned no payload.")
-
-    vector = _extract_embedding(payload)
+    embedder = HuggingFaceEmbedder(
+        api_key=hf_api_key,
+        model_id=model_name,
+        vector_dimension=_hf_vector_dimension(),
+        timeout_seconds=_hf_timeout_seconds(),
+    )
+    vector = embedder.generate_embedding(query)
     norm = math.sqrt(sum(value * value for value in vector))
     if norm > 0:
         vector = [value / norm for value in vector]
     return vector
+
+
+def _embedding_error_payload(error: Exception) -> dict[str, Any]:
+    message = str(error)
+    lowered = message.lower()
+
+    if "hf_api_key is required" in lowered:
+        return {
+            "error": "Dense query embedding is not configured.",
+            "code": "missing_hf_api_key",
+            "hint": "Set HF_API_KEY in .env, then redeploy with make refresh.",
+        }
+
+    if "hugging face embedding request failed" in lowered:
+        return {
+            "error": "Dense query embedding provider failed.",
+            "code": "hf_embedding_request_failed",
+            "hint": "Check HF_API_KEY, HF_EMBEDDING_MODEL, Hugging Face availability, and Lambda CloudWatch logs.",
+            "detail": message[:500],
+        }
+
+    return {
+        "error": "Dense query embedding failed.",
+        "code": "dense_embedding_failed",
+        "hint": "Check HF_API_KEY, HF_EMBEDDING_MODEL, and Lambda CloudWatch logs.",
+        "detail": message[:500],
+    }
 
 
 def _point_to_hit(point: Any) -> dict[str, Any]:
@@ -192,6 +182,79 @@ def _point_to_hit(point: Any) -> dict[str, Any]:
         "score": float(point.score or 0.0),
         "payload": point.payload or {},
     }
+
+
+def _query_text_from_payload(payload: dict[str, Any]) -> str:
+    for key in ("query", "text", "question", "prompt"):
+        value = str(payload.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _dedupe_queries(queries: list[str], original_query: str, limit: int = 5) -> list[str]:
+    original_normalized = original_query.strip().lower()
+    seen: set[str] = set()
+    output: list[str] = []
+    for query in queries:
+        cleaned = str(query or "").strip()
+        normalized = cleaned.lower()
+        if not cleaned or normalized == original_normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        output.append(cleaned)
+        if len(output) >= limit:
+            break
+    return output
+
+
+def _random_unit_vector(size: int) -> list[float]:
+    values = [random.gauss(0, 1) for _ in range(size)]
+    norm = math.sqrt(sum(value * value for value in values))
+    if norm <= 0:
+        return [0.0] * size
+    return [value / norm for value in values]
+
+
+def _related_queries_from_qdrant(
+    client: QdrantClient,
+    *,
+    query_vector: list[float],
+    original_query: str,
+) -> list[str]:
+    collection_name = os.environ.get("QUERY_COLLECTION_NAME", "codex_project-queries")
+    if not collection_name:
+        return []
+
+    try:
+        nearest = client.query_points(
+            collection_name=collection_name,
+            query=query_vector,
+            using="dense",
+            limit=20,
+        ).points
+    except Exception:
+        logger.exception("Failed to query related-query collection %s", collection_name)
+        return []
+
+    nearest_queries = [_query_text_from_payload(point.payload or {}) for point in nearest]
+    direct = nearest_queries[:3]
+    tangential_pool = nearest_queries[3:20]
+    tangential = [random.choice(tangential_pool)] if tangential_pool else []
+
+    wildcard: list[str] = []
+    try:
+        wildcard_points = client.query_points(
+            collection_name=collection_name,
+            query=_random_unit_vector(len(query_vector)),
+            using="dense",
+            limit=1,
+        ).points
+        wildcard = [_query_text_from_payload(point.payload or {}) for point in wildcard_points]
+    except Exception:
+        logger.exception("Failed to query wildcard related query from %s", collection_name)
+
+    return _dedupe_queries(direct + tangential + wildcard, original_query)
 
 
 def _video_ids_from_hits(hits: list[dict[str, Any]]) -> list[str]:
@@ -256,7 +319,7 @@ def _fallback_related_queries(raw_query: str) -> list[str]:
     ]
 
 
-def _related_queries(raw_query: str, metadata_lookup: dict[str, dict[str, Any]]) -> list[str]:
+def _related_queries_from_metadata(raw_query: str, metadata_lookup: dict[str, dict[str, Any]]) -> list[str]:
     raw_normalized = raw_query.strip().lower()
     query_tokens = set(_tokenize(raw_query))
     suggestions: list[str] = []
@@ -280,6 +343,19 @@ def _related_queries(raw_query: str, metadata_lookup: dict[str, dict[str, Any]])
     return suggestions
 
 
+def _related_queries(
+    client: QdrantClient,
+    *,
+    query_vector: list[float],
+    raw_query: str,
+    metadata_lookup: dict[str, dict[str, Any]],
+) -> list[str]:
+    qdrant_queries = _related_queries_from_qdrant(client, query_vector=query_vector, original_query=raw_query)
+    if qdrant_queries:
+        return qdrant_queries
+    return _related_queries_from_metadata(raw_query, metadata_lookup)
+
+
 def lambda_handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
     if event.get("httpMethod") == "OPTIONS":
         return options_response()
@@ -290,29 +366,22 @@ def lambda_handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
             return error_response("Missing required query parameter: q", 400)
 
         limit = min(max(int(_query_param(event, "limit", "10")), 1), 50)
+        search_type = _query_param(event, "type", "combined")
         qdrant_url = os.environ["QDRANT_URL"]
         qdrant_api_key = os.environ.get("QDRANT_API_KEY")
         collection_name = os.environ.get("COLLECTION_NAME", "codex_project-videos")
+        processed_query = query
 
         client = QdrantClient(url=qdrant_url, api_key=qdrant_api_key, timeout=20)
-        sparse_vector = None if _should_skip_sparse(query) else _build_sparse_query(query)
-        dense_vector: list[float] | None = None
-        dense_error: str | None = None
-
         try:
-            dense_vector = _dense_embedding(query)
+            dense_vector = _dense_embedding(processed_query)
         except Exception as exc:
-            dense_error = str(exc)
-            logger.warning("Dense embedding failed; sparse fallback available=%s", bool(sparse_vector), exc_info=True)
+            logger.exception("Dense query embedding failed")
+            return response(503, _embedding_error_payload(exc))
 
-        if dense_vector is None and sparse_vector is None:
-            return error_response(
-                "Search embedding failed and no sparse fallback was available. "
-                "Try a shorter keyword-style query or check HF_API_KEY/Hugging Face availability.",
-                503,
-            )
+        sparse_vector = None if _should_skip_sparse(processed_query) else _build_sparse_query(processed_query)
 
-        if dense_vector and sparse_vector:
+        if sparse_vector:
             threshold = 0.01
             result = client.query_points(
                 collection_name=collection_name,
@@ -325,16 +394,6 @@ def lambda_handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
                 score_threshold=threshold,
             )
             mode = "hybrid_rrf"
-        elif sparse_vector:
-            threshold = 0.01
-            result = client.query_points(
-                collection_name=collection_name,
-                query=sparse_vector,
-                using="sparse",
-                limit=limit,
-                score_threshold=threshold,
-            )
-            mode = "sparse"
         else:
             threshold = 0.46
             result = client.query_points(
@@ -354,12 +413,18 @@ def lambda_handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
             200,
             {
                 "query": query,
+                "processed_query": processed_query,
+                "type": search_type,
                 "mode": mode,
                 "threshold": threshold,
                 "count": len(hits),
                 "results": hits,
-                "related_queries": _related_queries(query, metadata_lookup),
-                "warning": f"Dense embedding failed; used sparse search. {dense_error}" if mode == "sparse" and dense_error else None,
+                "related_queries": _related_queries(
+                    client,
+                    query_vector=dense_vector,
+                    raw_query=query,
+                    metadata_lookup=metadata_lookup,
+                ),
             },
         )
     except Exception as exc:

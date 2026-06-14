@@ -1,4 +1,4 @@
-.PHONY: build check-aws deploy deploy-guided teardown clean release refresh upload_ui outputs validate
+.PHONY: build check-aws check-lambda-env deploy deploy-guided teardown clean release refresh upload_ui outputs validate
 
 # Fix Homebrew Python/libexpat linking issue on macOS.
 HOMEBREW_PREFIX ?= /opt/homebrew
@@ -23,8 +23,11 @@ STAGE_NAME    ?= prod
 VIDEO_DYNAMO_TABLE       := $(or $(strip $(VIDEO_DYNAMO_TABLE)),$(strip $(DITTO_VIDEOS_TABLE)),codex_project-content)
 BOOK_DYNAMO_TABLE        := $(or $(strip $(BOOK_DYNAMO_TABLE)),$(strip $(DITTO_BOOKS_TABLE)),codex_project-books)
 VIDEO_QDRANT_COLLECTION  := $(or $(strip $(VIDEO_QDRANT_COLLECTION)),$(strip $(VIDEO_COLLECTION_NAME)),codex_project-videos)
+QUERY_QDRANT_COLLECTION  := $(or $(strip $(QUERY_QDRANT_COLLECTION)),$(strip $(QUERY_COLLECTION_NAME)),codex_project-queries)
 CREATE_DYNAMO_TABLES     ?= true
 HF_EMBEDDING_MODEL       := $(or $(strip $(HF_EMBEDDING_MODEL)),BAAI/bge-m3)
+HF_VECTOR_DIMENSION      ?= 1024
+HF_TIMEOUT_SECONDS       ?= 25
 
 FRONTEND_DIR ?= ../frontend
 UI_FALLBACK_DIR ?= ui
@@ -36,10 +39,13 @@ PARAMETER_OVERRIDES = \
 	VideoMetadataTableName=$(VIDEO_DYNAMO_TABLE) \
 	BooksMetadataTableName=$(BOOK_DYNAMO_TABLE) \
 	VideoCollectionName=$(VIDEO_QDRANT_COLLECTION) \
+	QueryCollectionName=$(QUERY_QDRANT_COLLECTION) \
 	QdrantUrl=$(QDRANT_URL) \
 	QdrantApiKey=$(QDRANT_API_KEY) \
 	HfApiKey=$(HF_API_KEY) \
-	HfEmbeddingModel=$(HF_EMBEDDING_MODEL)
+	HfEmbeddingModel=$(HF_EMBEDDING_MODEL) \
+	HfVectorDimension=$(HF_VECTOR_DIMENSION) \
+	HfTimeoutSeconds=$(HF_TIMEOUT_SECONDS)
 
 validate:
 	@echo "Validating SAM template..."
@@ -47,6 +53,7 @@ validate:
 
 build:
 	@echo "Building SAM application..."
+	@rm -rf .aws-sam/build
 	@$(SAM) build -t $(TEMPLATE_FILE)
 
 check-aws:
@@ -72,6 +79,14 @@ check-aws:
 		exit 1; \
 	fi; \
 	rm -f $$TMP_ERR
+
+check-lambda-env: check-aws
+	@echo "Checking deployed Lambda environment for codex_project-similarity-search..."
+	@$(AWS) lambda get-function-configuration \
+		--function-name codex_project-similarity-search \
+		--region $(AWS_REGION) \
+		--query "{hasHF: contains(keys(Environment.Variables), 'HF_API_KEY'), hasQdrantUrl: contains(keys(Environment.Variables), 'QDRANT_URL'), hasQdrantKey: contains(keys(Environment.Variables), 'QDRANT_API_KEY'), model: Environment.Variables.HF_EMBEDDING_MODEL, dimension: Environment.Variables.HF_VECTOR_DIMENSION}" \
+		--output json
 
 deploy: check-aws build
 	@echo "Deploying SAM application..."
