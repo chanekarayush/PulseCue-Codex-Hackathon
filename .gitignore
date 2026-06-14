@@ -14,3 +14,5 @@ data_pipeline/books/books_output/*.json
 data_pipeline/books/books_enriched_metadata/*.json
 data_pipeline/books/processed_books_chunks/*.json
 data_pipeline/books/book_thumbnails/*.png
+node_modules/
+env/
