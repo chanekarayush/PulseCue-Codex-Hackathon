@@ -2,7 +2,7 @@
 
 ## Summary
 
-Maven is a multimodal spiritual search data pipeline for processing YouTube videos and PDF books into semantically searchable records. The pipeline extracts raw content, enriches it with structured LLM metadata, and chunks it for indexing into a vector database such as Qdrant and a NoSQL store such as DynamoDB.
+Maven is a multimodal search data pipeline for processing YouTube videos and PDF books into semantically searchable records. The pipeline extracts raw content, enriches it with structured LLM metadata, and chunks it for indexing into a vector database such as Qdrant and a NoSQL store such as DynamoDB.
 
 The implementation must preserve exact source anchors. For videos, the critical requirement is zero-drift timestamp mapping: every LLM-extracted story, musical segment, and semantic chunk must resolve back to the correct source timestamp using transcript character offsets and interpolation.
 
@@ -50,8 +50,8 @@ Every phase must be idempotent. Before doing network calls, LLM calls, PDF extra
 Use environment variables for runtime configuration:
 
 ```text
-LLM_PROVIDER=gemini
-GEMINI_API_KEY=...
+LLM_PROVIDER=openai
+OPENAI_API_KEY=...
 QDRANT_URL=...
 QDRANT_API_KEY=...
 DYNAMODB_TABLE_METADATA=...
@@ -153,7 +153,7 @@ Processing:
 3. Concatenate all transcript fragments into one full transcript string.
 4. Build a `char_to_time_map` during concatenation.
 5. Send the full transcript to the LLM with a strict zero-shot system prompt in Marathi or the target language.
-6. Request `response_mime_type="application/json"` when supported.
+6. Request a JSON-only response using the OpenAI API response format.
 7. Parse the response with the shared brace-counting JSON parser.
 8. Resolve timestamps for stories and musical segments from exact transcript text.
 
@@ -453,7 +453,7 @@ Expected Python dependencies:
 ```text
 youtube-transcript-api
 langchain-text-splitters
-google-generativeai
+openai
 pypdf
 qdrant-client
 boto3
