@@ -114,7 +114,7 @@ export default function MotivationRail({ onSearch }) {
                   key={item.experience_id || `${item.video_id}-${item.title}`}
                   onClick={() => onSearch(item.lesson || item.title || item.summary)}
                 >
-                  <span className="railItemTitle">{item.title || "Training experience"}</span>
+                  <span className="railItemTitle">{item.title || item.lesson || item.summary || "Experience highlight"}</span>
                   <small>
                     <Clock3 size={13} />
                     {formatTime(item.start_time_seconds)}

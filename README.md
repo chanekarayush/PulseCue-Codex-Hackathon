@@ -1,4 +1,4 @@
-# codex_project
+# PulseCue
 
 Multimodal motivation and fitness search data pipeline for YouTube videos and PDF books.
 

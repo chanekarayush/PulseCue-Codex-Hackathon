@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import PlayerDock from "./components/PlayerDock.jsx";
 import SearchPage from "./components/SearchPage.jsx";
 import { PlayerProvider } from "./context/PlayerContext.jsx";
-import { getConfig, search } from "./utils/api.js";
+import { APP_NAME, getConfig, search } from "./utils/api.js";
 
 function makeSession(query) {
   return {
@@ -28,7 +28,7 @@ function navigateToSearch() {
 
 export default function App() {
   const [sessions, setSessions] = useState([]);
-  const [config, setConfig] = useState({ projectName: "codex_project", apiUrl: "" });
+  const [config, setConfig] = useState({ projectName: APP_NAME, apiUrl: "" });
 
   useEffect(() => {
     getConfig().then(setConfig).catch(() => undefined);
@@ -83,6 +83,7 @@ export default function App() {
     <PlayerProvider>
       <div className="appShell" data-api-configured={Boolean(config.apiUrl)}>
         <SearchPage
+          projectName={config.projectName}
           sessions={sessions}
           onSearch={handleSearch}
           onFilterChange={handleFilterChange}

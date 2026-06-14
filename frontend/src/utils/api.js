@@ -1,3 +1,10 @@
+export const APP_NAME = "PulseCue";
+
+function displayProjectName(value) {
+  const clean = String(value || "").trim();
+  return clean && clean !== "codex_project" ? clean : APP_NAME;
+}
+
 const FALLBACK_RELATED = [
   "How do I stay consistent with workouts?",
   "How can I build mental toughness?",
@@ -20,12 +27,12 @@ async function loadRuntimeConfig() {
   runtimeConfigPromise = (async () => {
     const envApiUrl = trimTrailingSlash(import.meta.env.VITE_API_URL);
     if (envApiUrl) {
-      return { apiUrl: envApiUrl, projectName: "codex_project" };
+      return { apiUrl: envApiUrl, projectName: APP_NAME };
     }
 
     if (window.CODEX_PROJECT_CONFIG?.apiUrl) {
       return {
-        projectName: window.CODEX_PROJECT_CONFIG.projectName || "codex_project",
+        projectName: displayProjectName(window.CODEX_PROJECT_CONFIG.projectName),
         apiUrl: trimTrailingSlash(window.CODEX_PROJECT_CONFIG.apiUrl),
       };
     }
@@ -35,7 +42,7 @@ async function loadRuntimeConfig() {
       if (response.ok) {
         const config = await response.json();
         return {
-          projectName: config.projectName || "codex_project",
+          projectName: displayProjectName(config.projectName),
           apiUrl: trimTrailingSlash(config.apiUrl),
         };
       }
@@ -43,7 +50,7 @@ async function loadRuntimeConfig() {
       // Local development can use VITE_API_URL; deployed builds use /config.json.
     }
 
-    return { projectName: "codex_project", apiUrl: "" };
+    return { projectName: APP_NAME, apiUrl: "" };
   })();
 
   return runtimeConfigPromise;
@@ -88,7 +95,7 @@ function normalizeVideoHit(hit, payload, score) {
     score,
     relevance: scoreToPercent(score),
     video_id: videoId,
-    title: payload.title || payload.video_title || payload.source_title || "Motivation video",
+    title: payload.title || payload.video_title || payload.source_title || "Training clip",
     text: payload.text || payload.chunk_text || payload.transcript || "",
     start_time: startTime,
     end_time: endTime,
@@ -106,7 +113,7 @@ function normalizeBookHit(hit, payload, score) {
     score,
     relevance: scoreToPercent(score),
     book_id: payload.book_id || "",
-    title: payload.title || payload.book_title || payload.source_title || "Book result",
+    title: payload.title || payload.book_title || payload.source_title || "Book passage",
     author: payload.author || "",
     text: payload.text || payload.chunk_text || "",
     page_start: numberOrNull(payload.page_start ?? payload.page),
