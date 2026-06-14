@@ -46,7 +46,7 @@ function useSpeechSearch(onTranscript) {
   return { listening, start };
 }
 
-export default function SearchPage({ sessions, onSearch, onFilterChange }) {
+export default function SearchPage({ projectName = "PulseCue", sessions, onSearch, onFilterChange }) {
   const [inputValue, setInputValue] = useState("");
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
@@ -88,7 +88,7 @@ export default function SearchPage({ sessions, onSearch, onFilterChange }) {
         ref={inputRef}
         value={inputValue}
         onChange={(event) => setInputValue(event.target.value)}
-        placeholder="Ask about discipline, training, recovery, fat loss..."
+        aria-label="Search training moments"
       />
       <button className="submitButton" type="submit" aria-label="Search">
         <ArrowUp size={20} />
@@ -154,8 +154,8 @@ export default function SearchPage({ sessions, onSearch, onFilterChange }) {
       <main className="threadPanel">
         <header className="topBar">
           <div>
-            <span className="eyebrow">codex_project</span>
-            <h1>Motivation Search</h1>
+            <span className="eyebrow">Training moments</span>
+            <h1>{projectName}</h1>
           </div>
           {latestLoading && <Loader2 className="spin" size={20} />}
         </header>

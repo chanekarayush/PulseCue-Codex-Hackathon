@@ -13,7 +13,7 @@ export default function SearchGreeting({ children, onSearch }) {
     <section className="greeting" aria-label="Search start">
       <div className="greetingCopy">
         <span className="sectionLabel">Ask with intent</span>
-        <h2>Find the exact training moment that answers the question.</h2>
+        <h2>Find the exact video moment that answers your question.</h2>
         <p>Discipline, training, recovery, fat loss, and the hard weeks in between.</p>
       </div>
       {children}
