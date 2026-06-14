@@ -1,3 +1,16 @@
 node_modules/
 env/
 .env
+__pycache__/
+*.py[cod]
+.env
+.DS_Store
+
+data_pipeline/videos/output/*.json
+data_pipeline/videos/enriched_metadata/*.json
+data_pipeline/videos/processed_chunks/*.json
+data_pipeline/books/input_books/*.pdf
+data_pipeline/books/books_output/*.json
+data_pipeline/books/books_enriched_metadata/*.json
+data_pipeline/books/processed_books_chunks/*.json
+data_pipeline/books/book_thumbnails/*.png
