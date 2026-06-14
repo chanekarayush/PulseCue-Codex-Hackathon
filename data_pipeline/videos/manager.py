@@ -16,7 +16,7 @@ LOGGER = get_logger(__name__)
 class TranscriptManager:
     """Fetch transcripts from YouTube and normalize them for downstream stages."""
 
-    DEFAULT_LANGUAGES = ("mr", "hi", "en")
+    DEFAULT_LANGUAGES = ("en", "en-US", "en-GB")
 
     @staticmethod
     def parse_video_id(url_or_id: str) -> str:

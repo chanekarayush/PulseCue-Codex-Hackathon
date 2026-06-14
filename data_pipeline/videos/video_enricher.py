@@ -35,48 +35,57 @@ DEFAULT_OUTPUT_DIR = VIDEO_DIR / "enriched_metadata"
 
 
 VIDEO_SYSTEM_PROMPT = """
-तुम्ही Ditto या आध्यात्मिक शोध यंत्रासाठी अत्यंत अचूक metadata extractor आहात.
-तुम्हाला पूर्ण YouTube transcript दिला जाईल. फक्त वैध JSON object परत करा; markdown,
-स्पष्टीकरण, code fence किंवा अतिरिक्त मजकूर लिहू नका.
+You are Ditto's expert metadata extractor for English motivation and fitness
+videos. You will receive a full YouTube transcript. Return only a valid JSON
+object. Do not include markdown, code fences, or explanatory text.
 
 JSON schema:
 {
   "title_suggestion": "string",
   "summary": "string",
+  "target_audience": ["string"],
+  "difficulty_level": "beginner|intermediate|advanced|mixed|unknown",
   "topics": ["string"],
-  "questions": ["string"],
-  "actionable_practices": [
-    {"practice": "string", "why_it_matters": "string", "how_to_do_it": "string"}
-  ],
-  "quoted_verses": [
-    {"verse": "string", "source": "string|null", "meaning": "string"}
-  ],
-  "stories": [
+  "queries_solved": [
     {
-      "title": "string",
-      "summary": "string",
-      "characters": ["string"],
-      "spiritual_lesson": "string",
-      "exact_start_text": "segment च्या transcript मधील पहिले 7-10 शब्द जसेच्या तसे",
-      "exact_end_text": "segment च्या transcript मधील शेवटचे 7-10 शब्द जसेच्या तसे"
+      "query": "A search-style question solved in the video",
+      "answer": "Concise answer from the transcript",
+      "exact_start_text": "The first 7-10 words of the answered segment copied verbatim",
+      "exact_end_text": "The last 7-10 words of the answered segment copied verbatim"
     }
   ],
-  "musical_segments": [
+  "experiences": [
     {
       "title": "string",
-      "segment_type": "bhajan|kirtan|chant|music|other",
+      "experience_type": "personal_experience|client_transformation|failure_lesson|mindset_shift|other",
       "summary": "string",
-      "exact_start_text": "segment च्या transcript मधील पहिले 7-10 शब्द जसेच्या तसे",
-      "exact_end_text": "segment च्या transcript मधील शेवटचे 7-10 शब्द जसेच्या तसे"
+      "lesson": "string",
+      "exact_start_text": "The first 7-10 words of the experience segment copied verbatim",
+      "exact_end_text": "The last 7-10 words of the experience segment copied verbatim"
     }
+  ],
+  "fitness_advice": [
+    {
+      "advice": "string",
+      "category": "training|nutrition|recovery|mobility|fat_loss|muscle_gain|habit|mindset|safety|other",
+      "why_it_matters": "string",
+      "how_to_apply": "string",
+      "exact_start_text": "The first 7-10 words of the advice segment copied verbatim",
+      "exact_end_text": "The last 7-10 words of the advice segment copied verbatim"
+    }
+  ],
+  "motivational_takeaways": [
+    {"takeaway": "string", "context": "string"}
   ]
 }
 
 Critical rules:
-1. exact_start_text आणि exact_end_text transcript मधून verbatim copy करा.
-2. timestamps तयार करू नका; ते system code resolve करेल.
-3. खात्री नसल्यास रिकामी list वापरा.
-4. JSON keys वर दिलेल्या schema प्रमाणेच ठेवा.
+1. exact_start_text and exact_end_text must be copied verbatim from the transcript.
+2. Do not invent timestamps; the pipeline resolves timestamps from exact text anchors.
+3. Ignore audio-only, performance-only, or unrelated legacy metadata.
+4. Prefer practical fitness/motivation search intent over generic summaries.
+5. Use empty arrays when the transcript does not support a field.
+6. Keep JSON keys exactly as specified.
 """.strip()
 
 
@@ -85,10 +94,10 @@ def _resolve_timestamps(
     full_text: str,
     char_to_time_map: list[CharTimeSpan],
 ) -> dict[str, Any]:
-    """Resolve story/music exact text anchors to interpolated transcript times."""
+    """Resolve anchored fitness/motivation metadata to interpolated transcript times."""
 
     resolved = dict(metadata)
-    for key in ("stories", "musical_segments", "music_segments"):
+    for key in ("experiences", "fitness_advice", "queries_solved"):
         value = resolved.get(key)
         if isinstance(value, list):
             resolved[key] = [

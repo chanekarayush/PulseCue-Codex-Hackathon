@@ -35,8 +35,9 @@ FINAL_SAMPLE_CHARS = 8_000
 
 
 BOOK_SYSTEM_PROMPT = """
-You are Ditto's expert metadata extractor for spiritual books. You will receive a
-smart sample from a PDF: the beginning, middle, and end joined by [...] markers.
+You are Ditto's expert metadata extractor for English motivation, fitness,
+health, and self-improvement books. You will receive a smart sample from a PDF:
+the beginning, middle, and end joined by [...] markers.
 Return only a valid JSON object. Do not include markdown, code fences, or prose.
 
 JSON schema:

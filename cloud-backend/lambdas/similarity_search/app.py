@@ -21,8 +21,8 @@ from common import error_response, options_response, response
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-TOKEN_PATTERN = re.compile(r"[\w\u0900-\u097F]+", flags=re.UNICODE)
-STOPWORDS_PATH = Path(__file__).with_name("marathi_stopwords.json")
+TOKEN_PATTERN = re.compile(r"[a-zA-Z0-9]+(?:'[a-zA-Z0-9]+)?", flags=re.UNICODE)
+STOPWORDS_PATH = Path(__file__).with_name("english_stopwords.json")
 VOCAB_PATH = Path(__file__).with_name("vocab_idf.json")
 
 
@@ -50,8 +50,11 @@ def _tokenize(text: str, *, remove_stopwords: bool = True) -> list[str]:
 
 
 def _should_skip_sparse(raw_query: str) -> bool:
-    raw_words = TOKEN_PATTERN.findall(raw_query or "")
-    return len(raw_words) > 3
+    raw_words = _tokenize(raw_query, remove_stopwords=False)
+    content_words = _tokenize(raw_query, remove_stopwords=True)
+    if not content_words:
+        return True
+    return len(raw_words) > 10 or len(content_words) > 6
 
 
 def _build_sparse_query(query: str) -> models.SparseVector | None:
@@ -205,4 +208,3 @@ def lambda_handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
     except Exception as exc:
         logger.exception("Search failed")
         return error_response(str(exc))
-

@@ -1,4 +1,4 @@
-"""Library grid API Lambda for videos, music, and books."""
+"""Library grid API Lambda for videos and books."""
 
 from __future__ import annotations
 
@@ -38,25 +38,6 @@ def _video_summary(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _music_segments(video: dict[str, Any]) -> list[dict[str, Any]]:
-    video_id = video.get("video_id")
-    title = video.get("title") or video.get("title_suggestion")
-    segments = video.get("musical_segments") or video.get("music_segments") or []
-    flattened = []
-    for index, segment in enumerate(segments):
-        if not isinstance(segment, dict):
-            continue
-        flattened.append(
-            {
-                "music_id": f"{video_id}#music#{index:03d}",
-                "video_id": video_id,
-                "source_title": title,
-                **segment,
-            }
-        )
-    return flattened
-
-
 def lambda_handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
     if event.get("httpMethod") == "OPTIONS":
         return options_response()
@@ -83,16 +64,6 @@ def lambda_handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
             )
             return response(200, {"count": len(videos), "videos": [_video_summary(item) for item in videos]})
 
-        if route == "/music":
-            videos = scan_all(
-                video_table,
-                ProjectionExpression="video_id, title, title_suggestion, musical_segments, music_segments",
-            )
-            music = []
-            for video in videos:
-                music.extend(_music_segments(video))
-            return response(200, {"count": len(music), "music": decimal_to_native(music)})
-
         if route == "/books":
             if not books_table_name:
                 return response(200, {"count": 0, "books": []})
@@ -107,4 +78,3 @@ def lambda_handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
     except Exception as exc:
         logger.exception("Library API failed")
         return error_response(str(exc))
-

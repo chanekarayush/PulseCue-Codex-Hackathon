@@ -1,6 +1,6 @@
 # codex_project
 
-Multimodal spiritual search data pipeline for YouTube videos and PDF books.
+Multimodal motivation and fitness search data pipeline for YouTube videos and PDF books.
 
 The pipeline extracts raw source text, enriches it with an LLM, creates anchored
 semantic chunks, generates BGE-M3 embeddings on Colab T4 GPU, and can upload
@@ -162,5 +162,5 @@ This prevents duplicate LLM calls and makes reruns safe.
 ## Notes
 
 - Video timestamp mapping is character-offset based and uses interpolation inside
-  transcript fragments for zero-drift chunk/story timestamps.
+  transcript fragments for zero-drift chunk, experience, advice, and solved-query timestamps.
 - Book chunking maps character offsets back to source page numbers.

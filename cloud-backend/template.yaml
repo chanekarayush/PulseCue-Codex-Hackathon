@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: codex_project serverless backend for multimodal spiritual search.
+Description: codex_project serverless backend for English motivation and fitness search.
 
 Parameters:
   ProjectName:
@@ -186,11 +186,11 @@ Resources:
             Path: /search
             Method: GET
 
-  GetStoriesFunction:
+  GetExperiencesFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: codex_project-get-stories
-      Handler: get_stories.app.lambda_handler
+      FunctionName: codex_project-get-experiences
+      Handler: get_experiences.app.lambda_handler
       Environment:
         Variables:
           DYNAMODB_TABLE: !Ref VideoMetadataTableName
@@ -202,11 +202,11 @@ Resources:
                 - dynamodb:Scan
               Resource: !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${VideoMetadataTableName}"
       Events:
-        Stories:
+        Experiences:
           Type: Api
           Properties:
             RestApiId: !Ref CodexProjectApi
-            Path: /stories
+            Path: /experiences
             Method: GET
 
   LibraryApiFunction:
@@ -240,12 +240,6 @@ Resources:
           Properties:
             RestApiId: !Ref CodexProjectApi
             Path: /videos/{videoId}
-            Method: GET
-        Music:
-          Type: Api
-          Properties:
-            RestApiId: !Ref CodexProjectApi
-            Path: /music
             Method: GET
         Books:
           Type: Api

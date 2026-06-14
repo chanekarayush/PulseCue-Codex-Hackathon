@@ -23,7 +23,11 @@ DEFAULT_METADATA_DIR = VIDEO_DIR / "enriched_metadata"
 def _segment_records(metadata: dict[str, Any]) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     video_id = metadata["video_id"]
-    for segment_type, key in (("story", "stories"), ("music", "musical_segments")):
+    for segment_type, key in (
+        ("experience", "experiences"),
+        ("fitness_advice", "fitness_advice"),
+        ("query_solved", "queries_solved"),
+    ):
         for index, segment in enumerate(metadata.get(key) or []):
             if not isinstance(segment, dict):
                 continue

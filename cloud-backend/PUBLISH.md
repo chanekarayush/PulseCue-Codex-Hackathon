@@ -8,7 +8,7 @@ the Colab pipeline.
 - API Gateway: `codex_project-api`
 - Lambda functions:
   - `codex_project-similarity-search`
-  - `codex_project-get-stories`
+  - `codex_project-get-experiences`
   - `codex_project-library-api`
   - `codex_project-admin-api`
   - `codex_project-dashboard-initiator`
@@ -164,10 +164,9 @@ Routes:
 
 ```text
 GET /search?q=<query>
-GET /stories
+GET /experiences
 GET /videos
 GET /videos/{videoId}
-GET /music
 GET /books
 GET /admin/videos
 GET /admin/videos/{videoId}
