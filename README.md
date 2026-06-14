@@ -549,28 +549,29 @@ Use this notebook:
 6. For book processing, upload PDFs to this Google Drive folder after Cell 1:
    - `/content/drive/MyDrive/codex_project/input_books`
 
-### Required Colab Secrets
+### Colab Secrets To Set
 
-For OpenAI enrichment:
+Minimum for the default notebook flow, where `RUN_LLM_ENRICHMENT=True`,
+`RUN_DYNAMO_UPLOAD=False`, and `RUN_QDRANT_UPLOAD=False`:
 
 ```text
 OPENAI_API_KEY
 ```
 
-For cloning a private repo:
+Also add this if the GitHub repo is private:
 
 ```text
 GITHUB_TOKEN
 ```
 
-For Qdrant upload:
+Only add these if you turn on `RUN_QDRANT_UPLOAD=True`:
 
 ```text
 QDRANT_URL
 QDRANT_API_KEY
 ```
 
-For DynamoDB upload:
+Only add these if you turn on `RUN_DYNAMO_UPLOAD=True`:
 
 ```text
 AWS_ACCESS_KEY_ID
@@ -580,7 +581,7 @@ DITTO_VIDEOS_TABLE
 DITTO_BOOKS_TABLE
 ```
 
-Optional overrides:
+Optional overrides. You do not need these unless you want to change defaults:
 
 ```text
 GITHUB_REPO_URL
@@ -591,6 +592,17 @@ DITTO_LLM_MAX_ATTEMPTS
 DITTO_VIDEO_SEGMENTS_TABLE
 VIDEO_QDRANT_COLLECTION
 BOOK_QDRANT_COLLECTION
+```
+
+Default values used when optional overrides are missing:
+
+```text
+GITHUB_BRANCH=feat/data-processing
+DITTO_LLM_MODEL=gpt-4o-mini
+DITTO_LLM_TEMPERATURE=0
+DITTO_LLM_MAX_ATTEMPTS=6
+VIDEO_QDRANT_COLLECTION=codex_project-videos
+BOOK_QDRANT_COLLECTION=codex_project-books
 ```
 
 ## Colab Run Steps
