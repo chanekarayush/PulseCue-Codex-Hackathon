@@ -2,6 +2,9 @@ __pycache__/
 *.py[cod]
 .env
 .DS_Store
+.aws-sam/
+cloud-backend/.aws-sam/
+cloud-backend/packaged.yaml
 
 data_pipeline/videos/output/*.json
 data_pipeline/videos/enriched_metadata/*.json

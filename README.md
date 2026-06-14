@@ -144,6 +144,16 @@ Put PDFs in:
 data_pipeline/books/input_books/
 ```
 
+## Cloud Backend
+
+The AWS SAM backend lives in `cloud-backend/`.
+
+Deployment guide:
+
+```text
+cloud-backend/PUBLISH.md
+```
+
 ## Idempotency
 
 Every file-producing phase checks whether its output already exists and skips it.
